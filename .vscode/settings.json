@@ -1,0 +1,9 @@
+{
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "editor.formatOnSave": true,
+    "clang-format.style": "file",
+    "files.associations": {
+        "*.jl": "julia",
+        "iostream": "cpp"
+    }
+}
