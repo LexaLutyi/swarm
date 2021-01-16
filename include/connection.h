@@ -3,31 +3,27 @@
 #include <Eigen/Sparse>
 
 // Connection define links between agents
+// Не стоит делать кучу всего ради экономии двух строчек кода
+// особенно, когда эти связи нужно писать руками
 
-class Connection {
-protected:
-	/* data */
+class PermanentConnection {
 public:
-	Connection(/* args */);
-};
-
-class ConstantConnection {
-	// adjacency(i, j) <> 0 <=> exists link i -> j
-	// adjacency(i, j) = 0 <=> there is no link from i to j
-
-private:
-	Eigen::SparseMatrix<double> adjacency;
+	Eigen::SparseMatrix<double> adjacency_matrix;
 
 public:
-	ConstantConnection() {}
-	void add_link(size_t i, size_t j, double weight = 1)
+	PermanentConnection(size_t n): adjacency_matrix(n, n){};
+	void add_connection(size_t i, size_t j, double w)
 	{
-		// if (weight == 0.) raise exception
-		adjacency.coeffRef(i, j) = weight;
+		adjacency_matrix.coeffRef(i, j) = w;
 	}
-	void remove_link(size_t i, size_t j)
+	void remove_connection(size_t i, size_t j)
 	{
-		adjacency.coeffRef(i, j) = 0.;
-		adjacency.prune(0.0);
+		adjacency_matrix.coeffRef(i, j) = 0.;
+		adjacency_matrix.prune(0.);
+	}
+	Eigen::SparseMatrix<double>::InnerIterator neighbours(size_t i)
+	{
+		Eigen::SparseMatrix<double>::InnerIterator it(adjacency_matrix, i);
+		return it;
 	}
 };
