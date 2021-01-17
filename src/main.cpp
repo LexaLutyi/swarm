@@ -3,6 +3,7 @@
 #include <random>
 #include <memory>
 #include <chrono>
+#include <algorithm>
 
 #include <Eigen/Dense>
 
@@ -19,7 +20,7 @@ int main(int argc, char *argv[])
 
 	// vector of agents
 	std::vector<std::unique_ptr<Agent>> agents;
-	size_t agents_number = 1000;
+	size_t agents_number = 100;
 
 	// initialization of model
 	for (auto i = 0; i < agents_number; i++) {
@@ -46,10 +47,10 @@ int main(int argc, char *argv[])
 		// if (i + 10 < agents_number)
 		// 	pc.add_connection(i + 9, i, 1.);
 	}
-	MetricConnection mc(0, 20, 10);
+	MetricConnectionXD mc(2, 0, 20, 10, true);
 	for (auto i = 0; i < agents_number; i++)
 		if (agents[i]->has_position)
-			mc.update(i, agents[i]->position()[0]);
+			mc.update(i, {agents[i]->position()[0], 19});
 
 	//
 	// std::cout << "********"
@@ -83,11 +84,11 @@ int main(int argc, char *argv[])
 			// 	ui += w_ij * (xj - xi);
 			// }
 
-			for (auto it_j = MetricIterator(mc, i, 2); it_j; ++it_j) {
-				auto j = it_j.j();
-				auto &x_j = agents[j]->state();
-				u_i += x_j - x_i;
-			}
+			// for (auto it_j = MetricIterator(mc, i, 2); it_j; ++it_j) {
+			// 	auto j = it_j.j();
+			// 	auto &x_j = agents[j]->state();
+			// 	// u_i += x_j - x_i;
+			// }
 
 			agents[i]->update_agent(u_i, v);
 		}
@@ -96,7 +97,7 @@ int main(int argc, char *argv[])
 		for (auto i = 0; i < agents_number; i++) {
 			agents[i]->move_agent(dt);
 			if (agents[i]->has_position)
-				mc.update(i, agents[i]->position()[0]);
+				mc.update(i, {agents[i]->position()[0], 19});
 		}
 	}
 
@@ -110,10 +111,11 @@ int main(int argc, char *argv[])
 
 	// for (auto &a : agents)
 	// 	std::cout << a->state()[0] << "\n";
-	// std::cout << "***********"
-	//           << "\n";
-	// for (auto &s : mc.adjacency_sets)
-	// 	std::cout << s.size() << "\n";
+	std::cout << "***********"
+	          << "\n";
+	for (auto &s : mc.adjacency_sets)
+		std::cout << s.first << "\t:\t" << s.second.size() << "\t"
+		          << agents[*s.second.begin()]->state() << "\n";
 	// std::cout << "***********"
 	//           << "\n";
 }

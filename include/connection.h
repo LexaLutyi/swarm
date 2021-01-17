@@ -163,3 +163,102 @@ public:
 
 	size_t j() const { return *it; }
 };
+
+class MetricConnectionXD {
+private:
+	// dimension number
+	size_t n_dim;
+	// start points
+	std::vector<double> x_start;
+	// end points
+	std::vector<double> x_end;
+	// last indexis
+	std::vector<size_t> n_end;
+	// size of intervals
+	std::vector<double> x_delta;
+
+	// boundaries type
+	std::vector<bool> is_cycle;
+
+public:
+	// xyz_i = {j_1, ..., j_m}
+	// if position(j_1) < x_i
+	// x0, x1, ..., x_n -> n + 1 points -> n + 2 sets
+
+	std::map<size_t, std::set<size_t>> adjacency_sets;
+	// std::multimap<size_t, size_t> adjacency_sets;
+
+	// id -> xyz_i
+	std::map<size_t, size_t> id_map;
+
+	// must be declared outside
+	// double position(Agent &a) { return a.get_state()[1]; }
+
+	MetricConnectionXD(size_t dim, double x0, double x1, size_t np,
+	                   bool cycle = false)
+	  : n_dim(dim)
+	{
+		auto x_del = (x1 - x0) / np;
+		for (auto i = 0; i < n_dim; i++) {
+			x_start.push_back(x0);
+			x_end.push_back(x1);
+			n_end.push_back(np);
+			x_delta.push_back(x_del);
+			is_cycle.push_back(cycle);
+		}
+	}
+
+	size_t get_index(std::vector<size_t> &ixs)
+	{
+		size_t k = 0;
+		for (size_t dim = 0; dim < n_dim; dim++) {
+			size_t o = 1;
+			for (size_t j = dim + 1; j < n_dim; j++)
+				o *= is_cycle[j] ? n_end[j] : n_end[j] + 2;
+			size_t i = is_cycle[dim] ? cycle(ixs[dim], n_end[dim]) :
+			                           no_cycle(ixs[dim], n_end[dim]);
+			k += o * i;
+		}
+		return k;
+	}
+	// i = 0 ... n-1
+	size_t cycle(ptrdiff_t i, size_t n) { return (n + ((i - 1) % n)) % n; }
+	// i = 0 ... n+1
+	size_t no_cycle(ptrdiff_t i, size_t n)
+	{
+		i = i < 0 ? 0 : i;
+		i = i > n + 1 ? n + 1 : i;
+		return i;
+	}
+
+	void update(size_t id, std::vector<double> pos)
+	{
+		std::vector<size_t> idx(n_dim);
+		for (auto dim = 0; dim < n_dim; dim++) {
+			auto i = (int)floor((pos[dim] - x_start[dim]) / x_delta[dim]) + 1;
+			idx[dim] = i;
+		}
+		auto i = get_index(idx);
+		auto it = id_map.find(id);
+		if (it == id_map.end()) {
+			id_map[id] = i;
+			adjacency_sets[i].insert(id);
+		}
+		else if (it->second != i) {
+			adjacency_sets[it->second].erase(id);
+			it->second = i;
+			adjacency_sets[i].insert(id);
+		}
+	}
+
+	void del(size_t id)
+	{
+		auto it = id_map.find(id);
+		if (it != id_map.end()) {
+			adjacency_sets[it->second].erase(id);
+			id_map.erase(it);
+		}
+	}
+
+	const std::vector<double> &delta() const { return x_delta; }
+};
