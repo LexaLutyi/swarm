@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
 
 	// vector of agents
 	std::vector<std::unique_ptr<Agent>> agents;
-	size_t agents_number = 100;
+	size_t agents_number = 1000;
 
 	// initialization of model
 	for (auto i = 0; i < agents_number; i++) {
@@ -84,12 +84,13 @@ int main(int argc, char *argv[])
 			// 	ui += w_ij * (xj - xi);
 			// }
 
-			// for (auto it_j = MetricIterator(mc, i, 2); it_j; ++it_j) {
-			// 	auto j = it_j.j();
-			// 	auto &x_j = agents[j]->state();
-			// 	// u_i += x_j - x_i;
-			// }
-
+			for (auto it_j = MetricIteratorXD(mc, i, 1.); it_j; ++it_j) {
+				auto j = it_j.j();
+				auto &x_j = agents[j]->state();
+				u_i += x_j - x_i;
+			}
+			if (u_i.norm() > 1)
+				u_i.normalize();
 			agents[i]->update_agent(u_i, v);
 		}
 
@@ -114,8 +115,13 @@ int main(int argc, char *argv[])
 	std::cout << "***********"
 	          << "\n";
 	for (auto &s : mc.adjacency_sets)
-		std::cout << s.first << "\t:\t" << s.second.size() << "\t"
-		          << agents[*s.second.begin()]->state() << "\n";
+		for (auto i : s.second) {
+			std::vector<size_t> ccc(2);
+			mc.get_coords(s.first, ccc);
+			std::cout << s.first << "\t:\t" << i << "\t" << agents[i]->state()
+			          << "\ti:\t" << ccc[0] << "\tj:\t" << ccc[1] << "\n";
+			;
+		}
 	// std::cout << "***********"
 	//           << "\n";
 }

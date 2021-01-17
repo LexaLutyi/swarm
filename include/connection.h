@@ -103,14 +103,14 @@ class MetricIterator {
 	// radius in cells
 	size_t r_cells;
 	// agent_i's cell
-	size_t cell_i;
+	size_t idx_i;
 	// cell to start
-	size_t cell_start;
+	size_t coords_start;
 	// cell to stop, works like end(): real end + 1
-	size_t cell_stop;
+	size_t coords_stop;
 
 	// current cell
-	size_t cell_j;
+	size_t coords_cur;
 	// current set iterator
 	std::set<size_t>::const_iterator it;
 	// are there any neighbours
@@ -125,19 +125,19 @@ public:
 			is_not_empty = false;
 			return;
 		}
-		cell_i = it_i->second;
+		idx_i = it_i->second;
 		double delta = mc.delta();
 		r_cells = (size_t)(radius / delta) + 1;
-		ptrdiff_t q = cell_i - r_cells;
-		cell_start = q < 0 ? 0 : q;
-		q = cell_i + r_cells;
-		cell_stop =
+		ptrdiff_t q = idx_i - r_cells;
+		coords_start = q < 0 ? 0 : q;
+		q = idx_i + r_cells;
+		coords_stop =
 		  q + 1 < mc.adjacency_sets.size() ? q + 1 : mc.adjacency_sets.size();
-		for (auto j = cell_start; j < cell_stop; j++)
+		for (auto j = coords_start; j < coords_stop; j++)
 			if (!mc.adjacency_sets[j].empty()) {
 				is_not_empty = true;
 				it = mc.adjacency_sets[j].cbegin();
-				cell_j = j;
+				coords_cur = j;
 				return;
 			}
 		is_not_empty = false;
@@ -148,11 +148,11 @@ public:
 	MetricIterator &operator++()
 	{
 		it++;
-		if (it == mc.adjacency_sets[cell_j].end()) {
-			for (auto j = cell_j + 1; j < cell_stop; j++) {
+		if (it == mc.adjacency_sets[coords_cur].end()) {
+			for (auto j = coords_cur + 1; j < coords_stop; j++) {
 				if (!mc.adjacency_sets[j].empty()) {
 					it = mc.adjacency_sets[j].cbegin();
-					cell_j = j;
+					coords_cur = j;
 					return *this;
 				}
 			}
@@ -172,8 +172,9 @@ private:
 	std::vector<double> x_start;
 	// end points
 	std::vector<double> x_end;
-	// last indexis
-	std::vector<size_t> n_end;
+	// number of intervals (size)
+	// depends on is_cycle
+	std::vector<size_t> x_size;
 	// size of intervals
 	std::vector<double> x_delta;
 
@@ -194,51 +195,104 @@ public:
 	// must be declared outside
 	// double position(Agent &a) { return a.get_state()[1]; }
 
-	MetricConnectionXD(size_t dim, double x0, double x1, size_t np,
+	MetricConnectionXD(size_t dim, double x_0, double x_n, size_t n,
 	                   bool cycle = false)
 	  : n_dim(dim)
 	{
-		auto x_del = (x1 - x0) / np;
-		for (auto i = 0; i < n_dim; i++) {
-			x_start.push_back(x0);
-			x_end.push_back(x1);
-			n_end.push_back(np);
+		auto x_del = (x_n - x_0) / n;
+		for (auto dim = 0; dim < n_dim; dim++) {
+			x_start.push_back(x_0);
+			x_end.push_back(x_n);
 			x_delta.push_back(x_del);
 			is_cycle.push_back(cycle);
+			x_size.push_back(cycle ? n : n + 2);
 		}
 	}
 
-	size_t get_index(std::vector<size_t> &ixs)
+	// index from good coords
+	size_t get_index(const std::vector<size_t> &coords) const
 	{
-		size_t k = 0;
-		for (size_t dim = 0; dim < n_dim; dim++) {
-			size_t o = 1;
-			for (size_t j = dim + 1; j < n_dim; j++)
-				o *= is_cycle[j] ? n_end[j] : n_end[j] + 2;
-			size_t i = is_cycle[dim] ? cycle(ixs[dim], n_end[dim]) :
-			                           no_cycle(ixs[dim], n_end[dim]);
-			k += o * i;
+		size_t idx = 0;
+		size_t power = 1;
+		for (auto dim = n_dim; dim > 0;) {
+			dim--;
+			idx += coords[dim] * power;
+			power *= x_size[dim];
 		}
-		return k;
+		return idx;
 	}
+
+	// coords from index
+	void get_coords(size_t idx, std::vector<size_t> &coords) const
+	{
+		for (size_t dim = n_dim; dim > 0;) {
+			dim--;
+			size_t n = x_size[dim];
+			size_t i = idx % n;
+
+			coords[dim] = i;
+			idx = (idx - i) / n;
+		}
+	}
+
+	// return out of range coords for cycle connection
+	// good coords otherwise
+	void sum_coords(const std::vector<size_t> &left,
+	                const std::vector<ptrdiff_t> &right,
+	                std::vector<ptrdiff_t> &result) const
+	{
+		for (size_t dim = 0; dim < n_dim; dim++) {
+			ptrdiff_t res = left[dim] + right[dim];
+			result[dim] = is_cycle[dim] ? res : no_cycle(res, x_size[dim]);
+		}
+	}
+
+	// index from bad coords
+	size_t get_index(const std::vector<ptrdiff_t> &coords) const
+	{
+		size_t idx = 0;
+		size_t power = 1;
+		for (auto dim = n_dim; dim > 0;) {
+			dim--;
+			size_t good_coord = is_cycle[dim] ? cycle(coords[dim], x_size[dim]) :
+			                                    no_cycle(coords[dim], x_size[dim]);
+			idx += good_coord * power;
+			power *= x_size[dim];
+		}
+		return idx;
+	}
+
 	// i = 0 ... n-1
-	size_t cycle(ptrdiff_t i, size_t n) { return (n + ((i - 1) % n)) % n; }
+	size_t cycle(ptrdiff_t i, size_t n) const
+	{
+		if (i < 0) {
+			return n - (-i) % n;
+		}
+		else {
+			return i % n;
+		}
+	}
 	// i = 0 ... n+1
-	size_t no_cycle(ptrdiff_t i, size_t n)
+	size_t no_cycle(ptrdiff_t i, size_t n) const
 	{
 		i = i < 0 ? 0 : i;
-		i = i > n + 1 ? n + 1 : i;
+		i = i > n - 1 ? n - 1 : i;
 		return i;
 	}
 
-	void update(size_t id, std::vector<double> pos)
+	void update(size_t id, const std::vector<double> &pos)
 	{
-		std::vector<size_t> idx(n_dim);
+		std::vector<ptrdiff_t> coords(n_dim);
 		for (auto dim = 0; dim < n_dim; dim++) {
-			auto i = (int)floor((pos[dim] - x_start[dim]) / x_delta[dim]) + 1;
-			idx[dim] = i;
+			double q = (pos[dim] - x_start[dim]) / x_delta[dim];
+			if (q >= 0) {
+				coords[dim] = (ptrdiff_t)floor(q);
+			}
+			else {
+				coords[dim] = (ptrdiff_t)floor(q) - 1;
+			}
 		}
-		auto i = get_index(idx);
+		auto i = get_index(coords);
 		auto it = id_map.find(id);
 		if (it == id_map.end()) {
 			id_map[id] = i;
@@ -261,4 +315,133 @@ public:
 	}
 
 	const std::vector<double> &delta() const { return x_delta; }
+};
+
+// for fixed i and radius
+// return every possible neighbouring agent
+class MetricIteratorXD {
+	// agent_i identifire
+	const size_t id_i;
+	// radius of interest
+	const double r;
+	// position data
+	const MetricConnectionXD &mc;
+	// agent_i's cell index
+	size_t idx_i;
+	// dimension number
+	size_t n_dim;
+	// cell to start
+	std::vector<ptrdiff_t> coords_start;
+	// cell to stop, works like end(): real end + 1
+	std::vector<ptrdiff_t> coords_stop;
+
+	// current cell
+	std::vector<ptrdiff_t> coords_cur;
+	// current cell iterator
+	std::map<size_t, std::set<size_t>>::const_iterator cell_it;
+	// current set iterator
+	std::set<size_t>::const_iterator it;
+	// are there any neighbours
+	bool is_not_empty;
+
+	void next_cell()
+	{
+		// for initialization call
+		if (!is_not_empty) {
+			coords_cur = coords_start;
+			size_t j = mc.get_index(coords_cur);
+			cell_it = mc.adjacency_sets.find(j);
+			if (cell_it != mc.adjacency_sets.cend()) {
+				// found new cell
+				is_not_empty = true;
+				return;
+			}
+		}
+
+		// for iteration calls
+
+		for (auto dim = n_dim; dim > 0;) {
+			dim--;
+
+			coords_cur[dim]++;
+			for (; coords_cur[dim] != coords_stop[dim]; coords_cur[dim]++) {
+				if (dim + 1 < n_dim) {
+					// we always iterate on last dimension
+					dim++;
+				}
+				size_t j = mc.get_index(coords_cur);
+				cell_it = mc.adjacency_sets.find(j);
+				if (cell_it != mc.adjacency_sets.cend()) {
+					// found new cell
+					is_not_empty = true;
+					return;
+				}
+			}
+			coords_cur[dim] = coords_start[dim];
+		}
+		// no cells left
+		is_not_empty = false;
+		return;
+	}
+
+public:
+	MetricIteratorXD(const MetricConnectionXD &metric_connection, size_t id,
+	                 double radius)
+	  : mc(metric_connection), id_i(id), r(radius)
+	{
+		auto it_i = mc.id_map.find(id_i);
+		if (it_i == mc.id_map.cend()) {
+			is_not_empty = false;
+			return;
+		}
+		idx_i = it_i->second;
+
+		std::vector<double> delta = mc.delta();
+		n_dim = delta.size();
+
+		std::vector<ptrdiff_t> from(n_dim);
+		std::vector<ptrdiff_t> to(n_dim);
+
+		for (size_t dim = 0; dim < n_dim; dim++) {
+			ptrdiff_t r = (ptrdiff_t)((radius / delta[dim]) + 1);
+			from[dim] = -r;
+			to[dim] = r + 1;
+		};
+
+		std::vector<size_t> cur(n_dim);
+		mc.get_coords(idx_i, cur);
+		coords_start.resize(n_dim);
+		mc.sum_coords(cur, from, coords_start);
+		coords_stop.resize(n_dim);
+		mc.sum_coords(cur, to, coords_stop);
+
+		is_not_empty = false;
+		next_cell();
+		for (; is_not_empty; next_cell()) {
+			it = cell_it->second.cbegin();
+			if (it != cell_it->second.cend())
+				return;
+		}
+	}
+
+	explicit operator bool() const { return is_not_empty; }
+
+	MetricIteratorXD &operator++()
+	{
+		it++;
+		if (it != cell_it->second.cend())
+			return *this;
+
+		next_cell();
+		for (; is_not_empty; next_cell()) {
+			it = cell_it->second.cbegin();
+			if (it != cell_it->second.cend()) {
+				return *this;
+			}
+		}
+
+		return *this;
+	}
+
+	size_t j() const { return *it; }
 };
