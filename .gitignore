@@ -30,9 +30,3 @@
 *.exe
 *.out
 *.app
-
-# Build
-build
-
-# Eigen
-eigen-3.3.9
